@@ -77,29 +77,32 @@ func serveHTML(w http.ResponseWriter, r *http.Request) {
 			if (rxData.length > maxPoints) rxData.shift();
 			if (txData.length > maxPoints) txData.shift();
 
+			// Only draw after receiving at least two data points
+			if (rxData.length < 2 || txData.length < 2) return;
+
 			// Draw graph
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 
 			// Draw RX (blue)
 			ctx.beginPath();
 			ctx.strokeStyle = "blue";
-			rxData.forEach((val, i) => {
+			for (let i = 0; i < rxData.length; i++) {
 				let x = (i / maxPoints) * canvas.width;
-				let y = canvas.height - (val / 1000); // Scale factor
+				let y = canvas.height - (rxData[i] / 1000); // Scale factor
 				if (i === 0) ctx.moveTo(x, y);
 				else ctx.lineTo(x, y);
-			});
+			}
 			ctx.stroke();
 
 			// Draw TX (green)
 			ctx.beginPath();
 			ctx.strokeStyle = "green";
-			txData.forEach((val, i) => {
+			for (let i = 0; i < txData.length; i++) {
 				let x = (i / maxPoints) * canvas.width;
-				let y = canvas.height - (val / 1000); // Scale factor
+				let y = canvas.height - (txData[i] / 1000); // Scale factor
 				if (i === 0) ctx.moveTo(x, y);
 				else ctx.lineTo(x, y);
-			});
+			}
 			ctx.stroke();
 		};
 	</script>
@@ -125,6 +128,7 @@ func serveWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var prevRx, prevTx int64
+	firstRun := true
 
 	for {
 		rx, tx, err := getNetworkStats(device)
@@ -133,8 +137,17 @@ func serveWebSocket(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		rxRate := rx - prevRx
-		txRate := tx - prevTx
+		var rxRate, txRate int64
+		if firstRun {
+			// Skip drawing until we have a second data point
+			prevRx, prevTx = rx, tx
+			firstRun = false
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		rxRate = rx - prevRx
+		txRate = tx - prevTx
 		prevRx, prevTx = rx, tx
 
 		data := map[string]int64{"rx": rxRate, "tx": txRate}
