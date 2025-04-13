@@ -35,7 +35,16 @@ func getNetworkStats(device string) (int64, int64, error) {
 	return 0, 0, fmt.Errorf("device not found")
 }
 
+func getHostname() string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "unknown"
+	}
+	return hostname
+}
+
 func serveHTML(w http.ResponseWriter, r *http.Request) {
+	hostname := getHostname()
 	html := `
 <!DOCTYPE html>
 <html>
@@ -59,6 +68,8 @@ func serveHTML(w http.ResponseWriter, r *http.Request) {
 	<script>
 		let params = new URLSearchParams(window.location.search);
 		let device = params.get("device") || "eth0";
+		let hostname = ` + fmt.Sprintf("%q", hostname) + `;
+
 		let socket = new WebSocket("ws://" + location.host + "/ws?device=" + device);
 		let canvas = document.getElementById("graph");
 		let ctx = canvas.getContext("2d");
@@ -80,7 +91,7 @@ func serveHTML(w http.ResponseWriter, r *http.Request) {
 			// Only draw after receiving at least two data points
 			if (rxData.length < 2 || txData.length < 2) return;
 
-			// Draw graph
+			// Clear canvas
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 
 			// Draw RX (blue)
@@ -104,6 +115,12 @@ func serveHTML(w http.ResponseWriter, r *http.Request) {
 				else ctx.lineTo(x, y);
 			}
 			ctx.stroke();
+
+			// Draw overlay with device and hostname
+			ctx.font = "14px Arial";
+			ctx.fillStyle = "black";
+			ctx.fillText(hostname, 10, 20);
+			ctx.fillText(device, 10, 38);
 		};
 	</script>
 </body>
@@ -120,7 +137,6 @@ func serveWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	// Get the network device from the query parameters
 	query := r.URL.Query()
 	device := query.Get("device")
 	if device == "" {
